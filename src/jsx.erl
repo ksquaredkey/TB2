@@ -188,25 +188,33 @@ nested_array() ->
     }].
 
 
-empty_object() -> [{"{}", <<"{}">>, [{}], [start_object, end_object]}].
+empty_object() ->
+    [
+        %% proplist representation
+        {"{}", <<"{}">>, [{}], [start_object, end_object]},
+        %% map representation
+        {"{}", <<"{}">>, #{}, [start_object, end_object]}
+    ].
 
 
 nested_object() ->
-    [{
-        "{\"key\":{\"key\":{}}}",
-        <<"{\"key\":{\"key\":{}}}">>,
-        [{<<"key">>, [{<<"key">>, [{}]}]}],
-        [
+    Name = "{\"key\":{\"key\":{}}}",
+    JSON = <<"{\"key\":{\"key\":{}}}">>,
+    Events = [start_object,
+            {key, <<"key">>},
             start_object,
                 {key, <<"key">>},
                 start_object,
-                    {key, <<"key">>},
-                    start_object,
-                    end_object,
                 end_object,
-            end_object
-        ]
-    }].
+            end_object,
+        end_object
+    ],
+    [
+        %% proplist representation
+        {Name, JSON, [{<<"key">>, [{<<"key">>, [{}]}]}], Events},
+        %% map representation
+        {Name, JSON, #{<<"key">> => #{<<"key">> => #{}}}, Events}
+    ].
 
 
 naked_strings() ->
@@ -228,7 +236,8 @@ naked_strings() ->
 strings() ->
     naked_strings()
     ++ [ wrap_with_array(Test) || Test <- naked_strings() ]
-    ++ [ wrap_with_object(Test) || Test <- naked_strings() ].
+    ++ [ wrap_with_proplist(Test) || Test <- naked_strings() ]
+    ++ [ wrap_with_map(Test) || Test <- naked_strings() ].
 
 
 naked_integers() ->
@@ -254,7 +263,8 @@ naked_integers() ->
 integers() ->
     naked_integers()
     ++ [ wrap_with_array(Test) || Test <- naked_integers() ]
-    ++ [ wrap_with_object(Test) || Test <- naked_integers() ].
+    ++ [ wrap_with_proplist(Test) || Test <- naked_integers() ]
+    ++ [ wrap_with_map(Test) || Test <- naked_integers() ].
 
 
 naked_floats() ->
@@ -285,8 +295,8 @@ naked_floats() ->
 floats() ->
     naked_floats()
     ++ [ wrap_with_array(Test) || Test <- naked_floats() ]
-    ++ [ wrap_with_object(Test) || Test <- naked_floats() ].
-
+    ++ [ wrap_with_proplist(Test) || Test <- naked_floats() ]
+    ++ [ wrap_with_map(Test) || Test <- naked_floats() ].
 
 naked_literals() ->
     [
@@ -303,45 +313,69 @@ naked_literals() ->
 literals() ->
     naked_literals()
     ++ [ wrap_with_array(Test) || Test <- naked_literals() ]
-    ++ [ wrap_with_object(Test) || Test <- naked_literals() ].
+    ++ [ wrap_with_proplist(Test) || Test <- naked_literals() ]
+    ++ [ wrap_with_map(Test) || Test <- naked_literals() ].
 
 
 compound_object() ->
-    [{
-        "[{\"alpha\":[1,2,3],\"beta\":{\"alpha\":[1.0,2.0,3.0],\"beta\":[true,false]}},[{}]]",
-        <<"[{\"alpha\":[1,2,3],\"beta\":{\"alpha\":[1.0,2.0,3.0],\"beta\":[true,false]}},[{}]]">>,
-        [[{<<"alpha">>, [1, 2, 3]}, {<<"beta">>, [{<<"alpha">>, [1.0, 2.0, 3.0]}, {<<"beta">>, [true, false]}]}], [[{}]]],
-        [
-            start_array,
+    Name = "[{\"alpha\":[1,2,3],\"beta\":{\"alpha\":[1.0,2.0,3.0],\"beta\":[true,false]}},[{}]]",
+    JSON = <<"[{\"alpha\":[1,2,3],\"beta\":{\"alpha\":[1.0,2.0,3.0],\"beta\":[true,false]}},[{}]]">>,
+    Events = [
+        start_array,
+            start_object,
+                {key, <<"alpha">>},
+                start_array,
+                    {integer, 1},
+                    {integer, 2},
+                    {integer, 3},
+                end_array,
+                {key, <<"beta">>},
                 start_object,
                     {key, <<"alpha">>},
                     start_array,
-                        {integer, 1},
-                        {integer, 2},
-                        {integer, 3},
+                        {float, 1.0},
+                        {float, 2.0},
+                        {float, 3.0},
                     end_array,
                     {key, <<"beta">>},
-                    start_object,
-                        {key, <<"alpha">>},
-                        start_array,
-                            {float, 1.0},
-                            {float, 2.0},
-                            {float, 3.0},
-                        end_array,
-                        {key, <<"beta">>},
-                        start_array,
-                            {literal, true},
-                            {literal, false},
-                        end_array,
-                    end_object,
+                    start_array,
+                        {literal, true},
+                        {literal, false},
+                    end_array,
                 end_object,
-                start_array,
-                    start_object,
-                    end_object,
-                end_array,
-            end_array
-        ]
-    }].
+            end_object,
+            start_array,
+                start_object,
+                end_object,
+            end_array,
+        end_array
+    ],
+    [
+        %% proplist representation
+        {Name,
+            JSON,
+            [
+                [{<<"alpha">>, [1, 2, 3]}, {<<"beta">>,
+                    [{<<"alpha">>, [1.0, 2.0, 3.0]},
+                    {<<"beta">>, [true, false]}]
+                }],
+                [[{}]]
+            ],
+            Events
+        },
+        %% map representation
+        {Name,
+            JSON,
+            [
+                #{<<"alpha">> => [1, 2, 3], <<"beta">> => #{
+                    <<"alpha">> => [1.0, 2.0, 3.0],
+                    <<"beta">> => [true, false]
+                }},
+                [#{}]
+            ],
+            Events
+        }
+    ].
 
 
 special_objects() ->
@@ -353,9 +387,21 @@ special_objects() ->
             [start_object, {key, <<"key">>}, {string, <<"atom">>}, end_object]
         },
         {
+            "[{key, atom}]",
+            <<"{\"key\":\"atom\"}">>,
+            #{key => atom},
+            [start_object, {key, <<"key">>}, {string, <<"atom">>}, end_object]
+        },
+        {
             "[{1, true}]",
             <<"{\"1\":true}">>,
             [{1, true}],
+            [start_object, {key, <<"1">>}, {literal, true}, end_object]
+        },
+        {
+            "[{1, true}]",
+            <<"{\"1\":true}">>,
+            #{1 => true},
             [start_object, {key, <<"1">>}, {literal, true}, end_object]
         }
     ].
@@ -381,7 +427,7 @@ wrap_with_array({Title, JSON, Term, Events}) ->
     }.
 
 
-wrap_with_object({Title, JSON, Term, Events}) ->
+wrap_with_proplist({Title, JSON, Term, Events}) ->
     {
         "{\"key\":" ++ Title ++ "}",
         <<"{\"key\":", JSON/binary, "}">>,
@@ -389,6 +435,14 @@ wrap_with_object({Title, JSON, Term, Events}) ->
         [start_object, {key, <<"key">>}] ++ Events ++ [end_object]
     }.
 
+
+wrap_with_map({Title, JSON, Term, Events}) ->
+    {
+        "{\"key\":" ++ Title ++ "}",
+        <<"{\"key\":", JSON/binary, "}">>,
+        #{<<"key">> => Term},
+        [start_object, {key, <<"key">>}] ++ Events ++ [end_object]
+    }.
 
 sane_float_to_list(X) ->
     [Output] = io_lib:format("~p", [X]),
