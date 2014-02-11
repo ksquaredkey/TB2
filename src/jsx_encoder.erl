@@ -41,10 +41,15 @@ encode(Term) -> encode(Term, ?MODULE).
 
 encode([], _EntryPoint) -> [start_array, end_array];
 encode([{}], _EntryPoint) -> [start_object, end_object];
+encode(Map, _EntryPoint) when is_map(Map), map_size(Map) < 1 -> [start_object, end_object];
 
 encode([{_, _}|_] = Term, EntryPoint) ->
     lists:flatten(
         [start_object] ++ [ EntryPoint:encode(T, EntryPoint) || T <- unzip(Term) ] ++ [end_object]
+    );
+encode(Term, EntryPoint) when is_map(Term) ->
+    lists:flatten(
+        [start_object] ++ [ EntryPoint:encode(T, EntryPoint) || T <- unpack(Term) ] ++ [end_object]
     );
 encode(Term, EntryPoint) when is_list(Term) ->
     lists:flatten(
@@ -57,7 +62,15 @@ encode(Else, _EntryPoint) -> [Else].
 unzip(List) -> unzip(List, []).
 
 unzip([], Acc) -> lists:reverse(Acc);
-unzip([{K, V}|Rest], Acc) when is_binary(K); is_atom(K); is_integer(K) -> unzip(Rest, [V, K] ++ Acc).
+unzip([{K, V}|Rest], Acc) when is_binary(K); is_atom(K); is_integer(K) ->
+    unzip(Rest, [V, K] ++ Acc).
+
+
+unpack(Map) -> unpack(maps:keys(Map), Map, []).
+
+unpack([], _, Acc) -> lists:reverse(Acc);
+unpack([K|Rest], Map, Acc) when is_binary(K); is_atom(K); is_integer(K) ->
+    unpack(Rest, Map, [maps:get(K, Map), K] ++ Acc). 
 
 
 -ifdef(TEST).
